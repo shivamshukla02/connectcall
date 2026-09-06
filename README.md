@@ -1,214 +1,200 @@
-<div align="center">
+# ConnectCall
 
-# 🛡️ SYNTRIX — Voice AI Incident Commander
+Real-time 1-to-1 audio and video calling app built with Flutter, Firebase, and ZEGOCLOUD.
 
-**An AI that joins your incident call, listens, thinks, and keeps everyone aligned — without ever pretending to know the root cause.**
+## Overview
 
-Built for **EchoSphere: Agora Conversational AI Hackathon 2026**
+ConnectCall is a Flutter application implementing user authentication, a live contacts directory, and 1-to-1 call signaling backed by Firebase. It's built as a feature-first, layered Flutter app using Riverpod for state management and GoRouter for navigation.
 
-[![Agora](https://img.shields.io/badge/Voice-Agora%20RTC-1E9E6B?style=for-the-badge)](https://www.agora.io/)
-[![Node](https://img.shields.io/badge/Backend-Node.js-3B66E0?style=for-the-badge)](https://nodejs.org/)
-[![React](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-7C5CFC?style=for-the-badge)](https://react.dev/)
-[![Live Demo](https://img.shields.io/badge/Live-Demo-D14343?style=for-the-badge)](https://incident-commander-eta.vercel.app/)
+## Key Features
 
-</div>
+- Email/password registration and login via Firebase Authentication
+- Persistent auth state with automatic splash-screen redirect (`SplashScreen` watches `authStateProvider`)
+- Live contacts list with search/filter (`ContactsScreen`, `UserService.watchAllUsers`)
+- Online/offline status tracking on the user document
+- Editable user profile (`EditProfileScreen`)
+- Real-time call signaling via Firestore (`CallService`) with a documented call-state machine
+- Global incoming-call detection (`IncomingCallListener`) that surfaces a full-screen incoming-call UI regardless of the active tab
+- Runtime microphone/camera permission handling, including the permanently-denied → Settings path (`PermissionService`)
+- Duplicate-call prevention (`CallService.hasActiveCallBetween`)
+- Firestore security rules restricting user docs to their owner and call docs to their two participants
 
----
+## Tech Stack
 
-## 🎯 The Problem
-
-> A payment system goes down at 2 AM. Engineers, support leads, and business stakeholders pile into a call. Everyone's talking at once — some sharing facts, some guessing, some deciding. Ten minutes in, nobody agrees on what's confirmed, what's assumed, who owns what, or what's already been tried.
-
-Incidents aren't slow because people don't know what to do. They're slow because **nobody is tracking what everyone just said.**
-
-## 💡 The Idea
-
-SYNTRIX joins the incident call as a real participant over **Agora's real-time voice infrastructure**. It listens continuously, and instead of just transcribing, it actively **organizes the chaos**:
-
-| It hears... | It does... |
+| Layer | Choice |
 |---|---|
-| *"the payment API is returning 500s"* | Logs it as a **Fact** |
-| *"I think it's the connection pool"* | Logs it as a **Hypothesis** |
-| *"let's roll back the deployment"* | Logs it as a **Decision** |
-| *"Rohit, can you check the DB pool"* | Creates a tracked **Action Item** |
-| Two people contradicting each other | Raises a **Conflict Flag** — never picks a side |
-| Something sounds critical | **Proposes** an action — but waits for a human to confirm before doing anything |
+| Framework | Flutter / Dart |
+| State management | flutter_riverpod |
+| Routing | go_router |
+| Auth | firebase_auth |
+| Database | cloud_firestore |
+| RTC (in progress) | zego_uikit_prebuilt_call |
+| Permissions | permission_handler |
+| Config | flutter_dotenv |
 
-It never claims to know the root cause. It just makes sure the humans never lose the thread.
+**Why these choices:** Riverpod keeps business logic out of widgets and testable without a `BuildContext` — see `test/core_unit_test.dart`, which unit-tests `Validators` and `UserModel` with zero Flutter dependencies. GoRouter centralizes routes in one table (`AppRoutes`) instead of scattered `Navigator.push` calls. Firebase Auth + Firestore avoid hand-rolling a backend for what's fundamentally an auth + document-store problem. ZEGOCLOUD was selected for its prebuilt Flutter call UI, reducing custom RTC plumbing.
 
----
-
-## 🏗️ System Architecture
+## Architecture
 
 ```mermaid
 flowchart TD
-    subgraph ROOM["🎙️ Live Incident Room — Agora RTC"]
-        U1["👤 Engineer"]
-        U2["👤 Support Lead"]
-        U3["👤 Duty Commander"]
+    subgraph Presentation
+        A[LoginScreen / RegisterScreen]
+        B[HomeScreen]
+        C[ContactsScreen]
+        D[ProfileScreen / EditProfileScreen]
+        E[IncomingCallScreen]
+        F[SplashScreen]
     end
 
-    U1 & U2 & U3 -->|joins voice channel| AGORA["Agora RTC Engine<br/>real-time audio transport"]
-    AGORA -->|mic audio| STT["🗣️ Browser Speech-to-Text<br/>live transcription"]
+    subgraph State["State Management (Riverpod)"]
+        P1[authStateProvider / currentUserProvider]
+        P2[allUsersProvider / filteredUsersProvider]
+        P3[incomingCallProvider]
+    end
 
-    STT -->|"raw transcript chunk<br/>+ speaker + role"| API["⚙️ Express Backend<br/>/api/transcript"]
+    subgraph Services
+        S1[AuthService]
+        S2[UserService]
+        S3[CallService]
+        S4[PermissionService]
+    end
 
-    API --> CLASSIFY["🧠 LLM Classification Engine<br/>Groq · Llama-based"]
+    subgraph Models
+        M1[UserModel]
+        M2[CallModel]
+    end
 
-    CLASSIFY -->|structured JSON| ROUTER{Type?}
+    subgraph Firebase
+        FB1[(Firebase Authentication)]
+        FB2[(Cloud Firestore: users)]
+        FB3[(Cloud Firestore: calls)]
+    end
 
-    ROUTER -->|fact| FACTS[("📘 Fact Table")]
-    ROUTER -->|hypothesis| HYPO[("💭 Hypotheses")]
-    ROUTER -->|decision| DEC[("✅ Decisions")]
-    ROUTER -->|action| ACT[("📋 Action Tracker<br/>owner · status · due")]
-    ROUTER -->|conflict| CONF[("⚠️ Conflict Log")]
+    RTC[ZEGOCLOUD RTC — signaling built, media connection pending]
 
-    CLASSIFY -->|"critical? + keyword scan"| CRITICAL{Severity Check}
-    CRITICAL -->|yes| PROPOSE["🚨 AI proposes an action"]
-    PROPOSE --> CONFIRM{{"Human Confirms?"}}
-    CONFIRM -->|✅ yes| SLACK["📣 Slack Webhook<br/>real action fires"]
-    CONFIRM -->|❌ no| DISCARD["discarded — no action taken"]
+    A -->|calls| P1
+    F -->|watches| P1
+    C -->|watches| P2
+    E -->|watches, updates| P3
 
-    FACTS & HYPO & DEC & ACT & CONF --> STATE["🗄️ Live Incident State<br/>in-memory store"]
-    STATE -->|"socket.io push"| DASH["📊 React Dashboard<br/>Timeline · Actions · AI Assistant"]
+    P1 -->|delegates to| S1
+    P2 -->|delegates to| S2
+    P3 -->|delegates to| S3
 
-    style ROOM fill:#EBF0FE,stroke:#3B66E0,stroke-width:2px
-    style CLASSIFY fill:#F1EEFE,stroke:#7C5CFC,stroke-width:2px
-    style PROPOSE fill:#FBEAEA,stroke:#D14343,stroke-width:2px
-    style CONFIRM fill:#FBF1DE,stroke:#C9860F,stroke-width:2px
-    style SLACK fill:#E8F7F1,stroke:#1E9E6B,stroke-width:2px
-    style DASH fill:#EBF0FE,stroke:#3B66E0,stroke-width:2px
+    S1 -->|authenticates| FB1
+    S1 -->|writes/reads| FB2
+    S2 -->|streams| FB2
+    S3 -->|reads/writes| FB3
+
+    S1 -.->|deserializes into| M1
+    S2 -.->|deserializes into| M1
+    S3 -.->|deserializes into| M2
+
+    C -->|requests permission via| S4
+    S4 -.->|gates| RTC
+    S3 -.->|will hand off call to| RTC
 ```
 
----
-
-## 🔄 The Human-in-the-Loop Guardrail
-
-The one rule this whole system is built around: **the AI never acts alone on anything critical.**
+### Authentication Flow
 
 ```mermaid
-sequenceDiagram
-    participant Room as 🎙️ Incident Room
-    participant AI as 🧠 SYNTRIX AI
-    participant Dash as 📊 Dashboard
-    participant Human as 🧑‍💼 Duty Commander
-    participant Slack as 📣 Slack
-
-    Room->>AI: "we have a full payment outage"
-    AI->>AI: classify → fact + critical:true
-    AI->>Dash: push live update (Timeline)
-    AI->>Dash: propose action → "Page on-call engineer"
-    Dash-->>Human: shows pending suggestion, waits
-    Human->>Dash: clicks Confirm
-    Dash->>Slack: fires webhook — real message posted
-    Slack-->>Room: 🚨 team notified instantly
-
-    Note over AI,Human: If the human ignores or rejects it,<br/>nothing happens. Ever.
+flowchart TD
+    U[User] --> LR[LoginScreen / RegisterScreen]
+    LR -->|calls| AS[AuthService.signIn / .register]
+    AS -->|authenticates| FA[Firebase Authentication]
+    AS -->|creates/reads doc| FS[Firestore: users/uid]
+    FA --> ASP[authStateProvider]
+    ASP --> SS[SplashScreen]
+    SS -->|redirects| HS[HomeScreen]
+    FS --> CUP[currentUserProvider]
+    CUP --> HS
 ```
 
----
+### Call Signaling Flow (current implementation)
 
-## 🧩 What Each Layer Actually Does
-
-<table>
-<tr><td width="30%"><b>🎙️ Voice Layer</b></td><td>
-
-**Agora RTC** — every participant joins a real voice channel over Agora's infrastructure, with per-user tracks so the system always knows *who* is speaking, not just *what* was said.
-
-</td></tr>
-<tr><td><b>🧠 Intelligence Layer</b></td><td>
-
-Every transcript chunk is sent to an LLM with a strict instruction: **classify, don't narrate.** It returns structured JSON — type, summary, owner, due date, and a severity flag — never free-form prose. This is what turns a wall of talk into a queryable state.
-
-</td></tr>
-<tr><td><b>🗄️ State Layer</b></td><td>
-
-A live, continuously-updated incident record — facts, hypotheses, decisions, actions, conflicts, and a full timeline. This *is* the shared understanding the whole product exists to protect.
-
-</td></tr>
-<tr><td><b>🚦 Action Layer</b></td><td>
-
-A strict **propose → human-confirm → execute** state machine. Nothing touches the outside world (Slack, tickets, pages) without a person explicitly saying yes.
-
-</td></tr>
-<tr><td><b>📊 Dashboard Layer</b></td><td>
-
-A React command-center that every responder can watch live — Overview, Timeline, Action Items, and an AI Assistant panel — all updating over Socket.io the instant something new is classified.
-
-</td></tr>
-</table>
-
----
-
-## ✅ What's Real vs. What's Scoped Down
-
-Being upfront about hackathon-scope tradeoffs, because a working honest prototype beats a fake polished one:
-
-| Component | Status |
-|---|---|
-| Agora real-time voice room | ✅ Fully live |
-| LLM classification (facts/hypotheses/decisions/actions/conflicts) | ✅ Fully live |
-| Live dashboard with Socket.io | ✅ Fully live |
-| Human-confirm-before-action guardrail | ✅ Fully live |
-| Slack integration | ✅ Fully live |
-| Auto-proposal on detected severity | ✅ Fully live |
-| Speech-to-text | ⚠️ Browser-native STT (not yet Agora's native Conversational AI STT engine) |
-| Jira / PagerDuty integration | 🔜 Stubbed — same architecture, swap the webhook |
-| Multi-speaker simultaneous transcription | 🔜 Currently one active mic per client tab |
-
----
-
-## 🛠️ Tech Stack
-
-```
-Voice          → Agora RTC (agora-rtc-sdk-ng)
-Speech-to-Text → Web Speech API (browser-native)
-AI Reasoning   → Groq (OpenAI-compatible, Llama-based)
-Backend        → Node.js + Express + Socket.io
-Frontend       → React + Vite
-Integrations   → Slack Incoming Webhooks
-Hosting        → Render (backend) · Vercel (frontend)
+```mermaid
+flowchart TD
+    Caller -->|taps call button| CS1[ContactsScreen]
+    CS1 -->|requests| PS[PermissionService]
+    PS -->|mic/camera granted| CSVC[CallService.createCall]
+    CSVC -->|writes| FSC[(Firestore: calls/callId, status=ringing)]
+    FSC -->|streamed via| ICP[incomingCallProvider]
+    ICP --> ICL[IncomingCallListener]
+    ICL -->|pushes| ICS[IncomingCallScreen]
+    ICS -->|Accept: updates status=connecting| FSC
+    ICS -->|Decline: updates status=rejected| FSC
+    FSC -.->|next: hand off to| RTC[ZEGOCLOUD media session — Phase 5/6]
+    RTC -.-> MIC[Microphone]
+    RTC -.-> CAM[Camera]
 ```
 
----
+### User Data Flow
 
-## 🚀 Running It Yourself
-
-```bash
-# clone
-git clone https://github.com/shivamshukla02/incident-commander.git
-cd incident-commander
-
-# backend
-cd backend
-npm install
-cp .env.example .env   # fill in your real keys
-npm run dev
-
-# frontend (new terminal)
-cd frontend
-npm install
-npm run dev
+```mermaid
+flowchart LR
+    UI[ContactsScreen / ProfileScreen] --> RP[Riverpod: allUsersProvider / currentUserProvider]
+    RP --> SV[UserService]
+    SV -->|reads/writes| FS[(Firestore: users)]
+    FS -->|deserialized as| UM[UserModel]
+    UM --> RP
+    RP --> UI
 ```
 
-You'll need free keys from:
-- [console.agora.io](https://console.agora.io) — App ID + Certificate
-- [console.groq.com](https://console.groq.com) — free-tier LLM access
-- [api.slack.com/apps](https://api.slack.com/apps) — Incoming Webhook URL
+### Project Structure
 
----
+```mermaid
+flowchart TD
+    main[main.dart] --> core
+    main --> routing
+    main --> features
+    features --> providers
+    providers --> services
+    services --> models
+    routing --> features
+    test[test/] -.->|tests| core
+    test -.->|tests| models
+```
 
-## 👥 Team SYNTRIX
+```text
+lib/
+├── main.dart
+├── core/
+│   ├── constants/        # app_constants.dart, zego_config.dart
+│   ├── theme/             # app_theme.dart
+│   └── utils/             # validators.dart
+├── features/
+│   ├── auth/              # login_screen.dart, register_screen.dart
+│   ├── calling/           # incoming_call_screen.dart, incoming_call_listener.dart
+│   ├── contacts/          # contacts_screen.dart, widgets/user_tile.dart
+│   ├── home/              # home_screen.dart
+│   ├── profile/           # profile_screen.dart, edit_profile_screen.dart
+│   └── splash/            # splash_screen.dart
+├── models/                # user_model.dart, call_model.dart
+├── providers/             # auth_providers.dart, user_providers.dart, call_providers.dart
+├── routing/               # app_router.dart
+└── services/              # auth_service.dart, user_service.dart, call_service.dart, permission_service.dart
 
-| Name | Role |
-|---|---|
-| Shivam Shukla | Backend & Systems |
-| Arpit Singh Baghel | — |
+test/
+└── core_unit_test.dart    # Validators + UserModel unit tests
+```
 
----
+## Environment Configuration
 
-<div align="center">
+RTC credentials are loaded at runtime via `flutter_dotenv`, never hardcoded.
 
-**SYNTRIX doesn't try to solve your incident. It makes sure your team never loses track of it.**
+`.env.example` (committed):
+```env
+ZEGO_APP_ID=
+ZEGO_APP_SIGN=
+```
 
-</div>
+Create your own `.env` (gitignored) with real values before running the app. `ZegoConfig` (`lib/core/constants/zego_config.dart`) throws a clear error at startup if these are missing.
+
+## Firebase Setup
+
+1. Create a project at [console.firebase.google.com](https://console.firebase.google.com)
+2. Enable **Authentication → Email/Password**
+3. Create a **Cloud Firestore** database
+4. Run `flutterfire configure` from the project root to generate `lib/firebase_options.dart` and `android/app/google-services.json`
+5. Deploy security rules and indexes:
