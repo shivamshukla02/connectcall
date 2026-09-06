@@ -198,3 +198,62 @@ Create your own `.env` (gitignored) with real values before running the app. `Ze
 3. Create a **Cloud Firestore** database
 4. Run `flutterfire configure` from the project root to generate `lib/firebase_options.dart` and `android/app/google-services.json`
 5. Deploy security rules and indexes:
+
+
+## ZEGOCLOUD Setup
+
+1. Create a project at [console.zegocloud.com](https://console.zegocloud.com)
+2. Copy the **AppID** and **AppSign** into your local `.env`
+
+## Android Permissions
+
+Declared in `android/app/src/main/AndroidManifest.xml`: `INTERNET`, `RECORD_AUDIO`, `CAMERA`, `MODIFY_AUDIO_SETTINGS`, `BLUETOOTH`, `BLUETOOTH_CONNECT`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`. Runtime requests and denial handling (including permanently-denied → Settings) are implemented in `PermissionService`.
+
+## Installation & Running Locally
+
+```bash
+git clone <repo-url>
+cd connectcall
+cp .env.example .env   # fill in your ZEGOCLOUD credentials
+flutterfire configure   # generates firebase_options.dart + google-services.json
+flutter pub get
+flutter run
+```
+
+## Testing
+
+```bash
+flutter analyze   # No issues found!
+flutter test      # 6 tests passed — Validators + UserModel, no Firebase mocking required
+```
+
+## Current Implementation Status
+
+**Working end-to-end:**
+- Registration, login, logout, persistent auth state
+- Live contacts list with search
+- Profile view and edit
+- Firestore-backed call signaling: call creation, ringing state, global incoming-call popup, accept/reject state transitions, duplicate-call prevention
+- Runtime mic/camera permission flow
+
+**In progress:**
+- Actual ZEGOCLOUD audio/video media connection (the call document lifecycle is real; the live media session on accept is the next implementation phase)
+- Call history UI
+- Background/killed-app incoming call notifications (app-open-only for now)
+- Profile photo upload (requires Firebase Storage, not yet configured)
+
+## Known Limitations
+
+- Contacts list is unpaginated — fine at assignment scale, would need pagination for production
+- Presence (`isOnline`) is set on login/logout only, not a continuous heartbeat
+- No push notifications yet, so incoming calls only surface while the app is open
+
+## Security Considerations
+
+- Firestore rules (`firestore.rules`) restrict `users/{uid}` writes to the document owner and `calls/{callId}` reads/writes to the two participants
+- No secrets committed: `.env`, `google-services.json`, and keystores are gitignored; `.env.example` ships placeholders only
+- ZEGOCLOUD AppSign is loaded from environment config, never hardcoded in source
+
+## AI Disclosure
+
+AI tools were used for architecture guidance, implementation assistance, debugging, and documentation. All generated code was reviewed and tested against a real Firebase project and Android emulator as part of development.
