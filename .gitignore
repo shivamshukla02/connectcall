@@ -1,0 +1,34 @@
+# Ignore everything in this Downloads-based project directory
+*
+
+# Keep the Git configuration itself
+!.gitignore
+
+# Flutter/Dart project files
+!pubspec.yaml
+!pubspec.lock
+!analysis_options.yaml
+!.metadata
+
+# Firebase configuration
+!firebase.json
+!.firebaserc
+!firestore.rules
+!firestore.indexes.json
+!google-services.json
+!.env.example
+
+# Application source
+!lib/
+!lib/**
+
+# Tests
+!test/
+!test/**
+
+# Android project
+!android/
+!android/**
+
+# Keep Flutter-required root files if they exist
+!README.md
