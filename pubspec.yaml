@@ -10,23 +10,16 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
-
-  # State management
   flutter_riverpod: ^2.5.1
-
-  # Routing
   go_router: ^14.2.0
-
-  # Utilities (used from Phase 1 onward)
   intl: ^0.19.0
   equatable: ^2.0.5
-
-  # Firebase (Phase 2)
   firebase_core: ^3.4.1
   firebase_auth: ^5.2.1
   cloud_firestore: ^5.4.0
-
-  # NOTE: zego_uikit_prebuilt_call, permission_handler added in Phase 4
+  flutter_dotenv: ^6.0.1
+  permission_handler: 12.0.1
+  zego_uikit_prebuilt_call: ^4.24.4
 
 dev_dependencies:
   flutter_test:
@@ -35,3 +28,25 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - .env
+
+dependency_overrides:
+  zego_zim:
+    path: third_party/zego_zim
+  flutter_ringtone_player:
+    path: third_party/flutter_ringtone_player
+  flutter_volume_controller:
+    path: third_party/flutter_volume_controller
+  screen_brightness_android:
+    path: third_party/screen_brightness_android
+  zego_express_engine:
+    path: third_party/zego_express_engine
+  zego_uikit:
+    path: third_party/zego_uikit
+  zego_uikit_signaling_plugin:
+    path: third_party/zego_uikit_signaling_plugin
+  zego_uikit_prebuilt_call:
+    path: third_party/zego_uikit_prebuilt_call
+  zego_zpns:
+    path: third_party/zego_zpns

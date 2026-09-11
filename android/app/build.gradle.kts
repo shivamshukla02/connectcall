@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.shivamshukla02.connectcall"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = "28.2.13676358"
 
     compileOptions {
